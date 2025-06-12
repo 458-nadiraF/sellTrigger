@@ -1,0 +1,7 @@
+# requirements.txt
+aiohttp==3.8.5
+beautifulsoup4==4.12.2
+asyncio==3.4.3
+fastapi==0.104.1
+uvicorn==0.24.0
+
