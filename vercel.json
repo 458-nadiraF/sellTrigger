@@ -2,9 +2,8 @@
   "version": 2,
   "functions": {
     "api/main.py": {
-      "runtime": "python@3.9"
+      "runtime": "vercel-python@3.9"
     }
   },
   "redirects": [{ "source": "/", "destination": "/api" }]
 }
-
