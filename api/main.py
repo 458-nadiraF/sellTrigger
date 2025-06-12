@@ -3,7 +3,7 @@ import json
 import re
 import requests
 from bs4 import BeautifulSoup
-from typing import Dict, List
+from typing import Dict
 import threading
 import time
 
@@ -127,10 +127,10 @@ class RequestHandler(BaseHTTPRequestHandler):
         elif path == '/check':
             return self.handle_check_stocks()
         else:
-            return {
-                'statusCode': 404,
-                'body': json.dumps({'message': 'Not found'})
-            }
+            self.send_response(404)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'message': 'Not found'}).encode())
 
     def handle_restart(self):
         """Handle restart endpoint - clear stock watchlist"""
@@ -204,11 +204,20 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({'error': str(e)}).encode())
             return
 
-def run(server_class=HTTPServer, handler_class=RequestHandler, port=8080):
-    server_address = ('', port)
-    httpd = server_class(server_address, handler_class)
-    print(f'Serving on port {port}')
-    httpd.serve_forever()
+# Default handler for Vercel
+def handler(request):
+    return RequestHandler(request)
+
+# Entry point for Vercel
+app = handler
+
+# Alternative entry points
+main = app
+index = app
 
 if __name__ == "__main__":
-    run()
+    # Run the server locally if needed
+    server_address = ('', 8080)
+    httpd = HTTPServer(server_address, RequestHandler)
+    print('Starting server at http://localhost:8080')
+    httpd.serve_forever()
