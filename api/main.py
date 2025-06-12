@@ -90,7 +90,7 @@ class StockMonitor:
         """Send sell request to the specified endpoint"""
         try:
             session = await self.get_session()
-            url = f"http://danda.fi.da/jual={stock_symbol}"
+            url = f"http://engaging-purely-rabbit.ngrok-free.app/jual={stock_symbol}"
             
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 print(f"Sell request sent for {stock_symbol}, status: {response.status}")
