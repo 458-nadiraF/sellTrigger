@@ -1,19 +1,13 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import re
 import requests
 from bs4 import BeautifulSoup
 from typing import Dict
-import threading
-import time
 
 # Global storage for stock names and their target prices
 stock_watchlist: Dict[str, float] = {}
 
 class StockMonitor:
-    def __init__(self):
-        self.session = None
-
     def extract_price_from_html(self, html_content: str) -> float:
         """Extract stock price from Stockbit HTML"""
         try:
@@ -25,7 +19,6 @@ class StockMonitor:
                 # Remove commas and convert to float
                 price_text = price_text.replace(',', '')
                 return float(price_text)
-
         except Exception as e:
             print(f"Error extracting price: {e}")
         return 0.0
@@ -56,7 +49,7 @@ class StockMonitor:
 # Global monitor instance
 monitor = StockMonitor()
 
-def check_and_process_stocks():
+def check_and_process_stocks() -> dict:
     """Check all stocks and process sells if needed"""
     if not stock_watchlist:
         return {"message": "No stocks in watchlist"}
@@ -102,122 +95,103 @@ def check_and_process_stocks():
         "remaining_watchlist": stock_watchlist
     }
 
-class RequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'Hello, world!')
-        return
+def handler(request):
+    """Main request handler for Vercel"""
+    try:
+        method = request['httpMethod']
+        path = request['path']
+        body = request.get('body', '')
 
-    def do_POST(self):
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps({"message": "POST received"}).encode())
-        return
+        if method == 'GET':
+            if path == '/restart':
+                return handle_restart()
+            elif 'stockName=' in path:
+                return handle_add_stock(path)
+            elif path == '/check':
+                return handle_check_stocks()
+            else:
+                return {
+                    'statusCode': 404,
+                    'body': json.dumps({'message': 'Not found'})
+                }
+        
+        elif method == 'POST':
+            return {
+                'statusCode': 200,
+                'body': json.dumps({"message": "POST received"})
+            }
 
-    def handle_request(self):
-        """Main request handler for stock operations"""
-        path = self.path
-        if path == '/restart':
-            return self.handle_restart()
-        elif 'stockName=' in path:
-            return self.handle_add_stock(path)
-        elif path == '/check':
-            return self.handle_check_stocks()
-        else:
-            self.send_response(404)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'message': 'Not found'}).encode())
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
 
-    def handle_restart(self):
-        """Handle restart endpoint - clear stock watchlist"""
-        global stock_watchlist
-        stock_watchlist.clear()
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps({'message': 'Stock watchlist cleared', 'watchlist': stock_watchlist}).encode())
+def handle_restart():
+    """Handle restart endpoint - clear stock watchlist"""
+    global stock_watchlist
+    stock_watchlist.clear()
+    return {
+        'statusCode': 200,
+        'body': json.dumps({'message': 'Stock watchlist cleared', 'watchlist': stock_watchlist})
+    }
 
-    def handle_add_stock(self, path):
-        """Handle adding stock to watchlist"""
-        global stock_watchlist
-        try:
-            stock_match = re.search(r'stockName=([A-Z]{3,4})', path)
-            if not stock_match:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'Invalid stock name format. Use 3-4 letter code.'}).encode())
-                return
+def handle_add_stock(path):
+    """Handle adding stock to watchlist"""
+    global stock_watchlist
+    try:
+        stock_match = re.search(r'stockName=([A-Z]{3,4})', path)
+        if not stock_match:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Invalid stock name format. Use 3-4 letter code.'})
+            }
 
-            stock_symbol = stock_match.group(1)
+        stock_symbol = stock_match.group(1)
 
-            # Extract price from query
-            price_match = re.search(r'price=([0-9.]+)', path)
-            if not price_match:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': 'Price parameter is required'}).encode())
-                return
+        # Extract price from query
+        price_match = re.search(r'price=([0-9.]+)', path)
+        if not price_match:
+            return {
+                'statusCode': 400,
+                'body': json.dumps({'error': 'Price parameter is required'})
+            }
 
-            target_price = float(price_match.group(1))
+        target_price = float(price_match.group(1))
 
-            # Add to watchlist
-            stock_watchlist[stock_symbol] = target_price
+        # Add to watchlist
+        stock_watchlist[stock_symbol] = target_price
 
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
                 'message': f'Added {stock_symbol} to watchlist',
                 'stock': stock_symbol,
                 'target_price': target_price,
                 'watchlist': stock_watchlist
-            }).encode())
-            return
+            })
+        }
 
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
-            return
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
 
-    def handle_check_stocks(self):
-        """Handle manual stock checking"""
-        try:
-            result = check_and_process_stocks()
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
-            return
+def handle_check_stocks():
+    """Handle manual stock checking"""
+    try:
+        result = check_and_process_stocks()
+        return {
+            'statusCode': 200,
+            'body': json.dumps(result)
+        }
 
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
-            return
-
-# Default handler for Vercel
-def handler(request):
-    return RequestHandler(request)
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'body': json.dumps({'error': str(e)})
+        }
 
 # Entry point for Vercel
 app = handler
-
-# Alternative entry points
-main = app
-index = app
-
-if __name__ == "__main__":
-    # Run the server locally if needed
-    server_address = ('', 8080)
-    httpd = HTTPServer(server_address, RequestHandler)
-    print('Starting server at http://localhost:8080')
-    httpd.serve_forever()
