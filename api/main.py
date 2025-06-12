@@ -74,7 +74,7 @@ class StockMonitor:
         """Fetch stock price from Stockbit"""
         try:
             session = await self.get_session()
-            url = f"http://stockbit.com/saham/{stock_symbol}"
+            url = f"https://stockbit.com/symbol/{stock_symbol}"
             
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 if response.status == 200:
